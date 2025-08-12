@@ -25,9 +25,10 @@ from modules.signal_engine import signal_engine, check_signals, should_buy, shou
 from modules.trade_executor import execute_trade, check_total_loss, get_open_trades, trade_active
 from modules.risk_manager import check_exit_conditions
 from modules.logger import log_trade, get_trade_history
+from modules.schwab_auth import SchwabAuth
 
 # Load environment variables
-load_dotenv("config/.env")
+load_dotenv(".env")
 
 # Page configuration
 st.set_page_config(
@@ -101,6 +102,13 @@ class OptimizedScalpingBot:
         # Sidebar configuration
         self.setup_sidebar()
         
+        # Show OAuth interface (always visible)
+        st.markdown("---")
+        st.subheader("🔐 Schwab OAuth Authentication")
+        self.show_simple_oauth_interface()
+        
+        st.markdown("---")
+        
         # Main content
         if self.session_state.bot_running:
             self.run_trading_session()
@@ -139,6 +147,10 @@ class OptimizedScalpingBot:
         
         if st.sidebar.button("🗑️ Clear Trade History"):
             self.clear_trade_history()
+        
+        # Schwab Authentication
+        st.sidebar.subheader("🔐 Schwab Authentication")
+        self.show_simple_oauth_sidebar()
         
         # Bot control
         st.sidebar.subheader("🎮 Bot Control")
@@ -185,18 +197,21 @@ class OptimizedScalpingBot:
             self.show_daily_pnl()
         
         # Main trading area
-        tab1, tab2, tab3, tab4 = st.tabs(["📈 Live Trading", "📊 Technical Analysis", "📋 Trade History", "🎯 Performance"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔐 OAuth Setup", "📈 Live Trading", "📊 Technical Analysis", "📋 Trade History", "🎯 Performance"])
         
         with tab1:
-            self.show_live_trading()
+            self.show_oauth_setup()
         
         with tab2:
-            self.show_technical_analysis()
+            self.show_live_trading()
         
         with tab3:
-            self.show_trade_history()
+            self.show_technical_analysis()
         
         with tab4:
+            self.show_trade_history()
+        
+        with tab5:
             self.show_performance_analysis()
     
     def show_dashboard(self):
@@ -393,87 +408,101 @@ class OptimizedScalpingBot:
     
     def show_trade_history(self):
         """Show trade history"""
-        trades = get_trade_history(50)
-        
-        if not trades:
-            st.info("📋 No trades recorded yet")
-            return
-        
-        # Convert to DataFrame for better display
-        df_trades = pd.DataFrame(trades)
-        
-        # Display trade summary
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Total Trades", len(trades))
-        
-        with col2:
-            winning_trades = len([t for t in trades if t.get('pnl', 0) > 0])
-            st.metric("Winning Trades", winning_trades)
-        
-        with col3:
-            total_pnl = sum([t.get('pnl', 0) for t in trades])
-            st.metric("Total P&L", f"${total_pnl:.2f}")
-        
-        with col4:
-            win_rate = winning_trades / len(trades) * 100 if trades else 0
-            st.metric("Win Rate", f"{win_rate:.1f}%")
-        
-        # Trade table
-        st.subheader("📋 Recent Trades")
-        if not df_trades.empty:
-            # Format the DataFrame for display
-            display_df = df_trades.copy()
-            if 'timestamp' in display_df.columns:
-                display_df['timestamp'] = pd.to_datetime(display_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-            if 'pnl' in display_df.columns:
-                display_df['pnl'] = display_df['pnl'].apply(lambda x: f"${x:.2f}" if pd.notna(x) else "N/A")
+        try:
+            trades = get_trade_history(50)
             
-            st.dataframe(display_df, use_container_width=True)
+            if not trades:
+                st.info("📋 No trades recorded yet")
+                return
+            
+            # Convert to DataFrame for better display
+            df_trades = pd.DataFrame(trades)
+            
+            # Display trade summary
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Trades", len(trades))
+            
+            with col2:
+                # Filter trades with valid P&L data
+                trades_with_pnl = [t for t in trades if t.get('pnl') is not None]
+                winning_trades = len([t for t in trades_with_pnl if t.get('pnl', 0) > 0])
+                st.metric("Winning Trades", winning_trades)
+            
+            with col3:
+                total_pnl = sum([t.get('pnl', 0) or 0 for t in trades])
+                st.metric("Total P&L", f"${total_pnl:.2f}")
+            
+            with col4:
+                win_rate = winning_trades / len(trades_with_pnl) * 100 if trades_with_pnl else 0
+                st.metric("Win Rate", f"{win_rate:.1f}%")
+            
+            # Trade table
+            st.subheader("📋 Recent Trades")
+            if not df_trades.empty:
+                # Format the DataFrame for display
+                display_df = df_trades.copy()
+                if 'timestamp' in display_df.columns:
+                    display_df['timestamp'] = pd.to_datetime(display_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                if 'pnl' in display_df.columns:
+                    display_df['pnl'] = display_df['pnl'].apply(lambda x: f"${x:.2f}" if pd.notna(x) and x is not None else "N/A")
+                
+                st.dataframe(display_df, use_container_width=True)
+                
+        except Exception as e:
+            st.error(f"❌ Error displaying trade history: {e}")
+            st.info("📋 Trade history display error - this is normal for new installations")
     
     def show_performance_analysis(self):
         """Show performance analysis"""
-        trades = get_trade_history(100)
-        
-        if not trades:
-            st.info("📊 No performance data available yet")
-            return
-        
-        # Calculate performance metrics
-        self.calculate_performance_metrics(trades)
-        
-        # Performance overview
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Total P&L", f"${self.performance_metrics['total_pnl']:.2f}")
-        
-        with col2:
-            st.metric("Win Rate", f"{self.performance_metrics['win_rate']:.1f}%")
-        
-        with col3:
-            st.metric("Avg Win", f"${self.performance_metrics['avg_win']:.2f}")
-        
-        with col4:
-            st.metric("Avg Loss", f"${self.performance_metrics['avg_loss']:.2f}")
-        
-        # Performance charts
-        self.plot_performance_charts(trades)
+        try:
+            trades = get_trade_history(100)
+            
+            if not trades:
+                st.info("📊 No performance data available yet")
+                return
+            
+            # Calculate performance metrics
+            self.calculate_performance_metrics(trades)
+            
+            # Performance overview
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total P&L", f"${self.performance_metrics['total_pnl']:.2f}")
+            
+            with col2:
+                st.metric("Win Rate", f"{self.performance_metrics['win_rate']:.1f}%")
+            
+            with col3:
+                st.metric("Avg Win", f"${self.performance_metrics['avg_win']:.2f}")
+            
+            with col4:
+                st.metric("Avg Loss", f"${self.performance_metrics['avg_loss']:.2f}")
+            
+            # Performance charts
+            self.plot_performance_charts(trades)
+            
+        except Exception as e:
+            st.error(f"❌ Error displaying performance analysis: {e}")
+            st.info("📊 Performance analysis error - this is normal for new installations")
     
     def calculate_performance_metrics(self, trades):
         """Calculate performance metrics"""
         if not trades:
             return
         
-        winning_trades = [t for t in trades if t.get('pnl', 0) > 0]
-        losing_trades = [t for t in trades if t.get('pnl', 0) < 0]
+        # Filter trades with valid P&L data
+        trades_with_pnl = [t for t in trades if t.get('pnl') is not None]
+        winning_trades = [t for t in trades_with_pnl if t.get('pnl', 0) > 0]
+        losing_trades = [t for t in trades_with_pnl if t.get('pnl', 0) < 0]
         
         self.performance_metrics['total_trades'] = len(trades)
         self.performance_metrics['winning_trades'] = len(winning_trades)
         self.performance_metrics['losing_trades'] = len(losing_trades)
-        self.performance_metrics['total_pnl'] = sum([t.get('pnl', 0) for t in trades])
-        self.performance_metrics['win_rate'] = len(winning_trades) / len(trades) * 100 if trades else 0
+        self.performance_metrics['total_pnl'] = sum([t.get('pnl', 0) or 0 for t in trades])
+        self.performance_metrics['win_rate'] = len(winning_trades) / len(trades_with_pnl) * 100 if trades_with_pnl else 0
         self.performance_metrics['avg_win'] = sum([t.get('pnl', 0) for t in winning_trades]) / len(winning_trades) if winning_trades else 0
         self.performance_metrics['avg_loss'] = sum([t.get('pnl', 0) for t in losing_trades]) / len(losing_trades) if losing_trades else 0
     
@@ -608,6 +637,181 @@ class OptimizedScalpingBot:
         """Clear trade history"""
         self.session_state.trade_history = []
         st.success("🗑️ Trade history cleared")
+    
+    def show_oauth_setup(self):
+        """Show OAuth setup interface"""
+        st.subheader("🔐 Schwab OAuth Authentication")
+        self.show_simple_oauth_interface()
+    
+    def show_simple_oauth_interface(self):
+        """Show simple OAuth interface as fallback"""
+        st.info("📋 Schwab Authentication Required")
+        
+        st.markdown("""
+        ### 🔗 Step 1: Get Authorization URL
+        Click the link below to open the Schwab authorization page:
+        """)
+        
+        # Generate authorization URL with your actual client ID
+        client_id = os.getenv("SCHWAB_CLIENT_ID")
+        if not client_id:
+            st.error("❌ SCHWAB_CLIENT_ID not found in environment variables")
+            return
+        redirect_uri = "https://options-scalping-app-ydqxfd2qjfueqznzvxq9ts.streamlit.app/callback"
+        
+        auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?response_type=code&client_id={client_id}&scope=trading%20market_data%20account_read&redirect_uri={redirect_uri}&state=options_scalper"
+        
+        st.code(auth_url, language="text")
+        
+        # Clickable link
+        st.markdown(f"[🌐 **Click here to open Schwab Authorization Page**]({auth_url})")
+        
+        st.markdown("""
+        ### 📝 Step 2: Complete Authorization
+        1. **Sign in** to your Schwab account
+        2. **Authorize** the application
+        3. **Copy the entire URL** you're redirected to
+        """)
+        
+        # Input for authorization code
+        st.markdown("### 📋 Step 3: Paste Authorization URL")
+        
+        auth_url_input = st.text_input(
+            "Paste the complete URL you were redirected to:",
+            placeholder="https://options-scalping-app-ydqxfd2qjfueqznzvxq9ts.streamlit.app/callback?code=...",
+            help="Copy the entire URL from your browser after authorization"
+        )
+        
+        if auth_url_input:
+            if st.button("🔐 Complete Authentication", type="primary"):
+                success = self.process_oauth_callback(auth_url_input)
+                if success:
+                    st.success("✅ Authentication completed successfully!")
+                    st.rerun()
+                else:
+                    st.error("❌ Authentication failed. Please check the URL and try again.")
+    
+    def show_simple_oauth_sidebar(self):
+        """Show simple OAuth interface in sidebar"""
+        st.sidebar.info("📋 Schwab Auth Required - Cloud Updated")
+        
+        # Generate authorization URL
+        client_id = os.getenv("SCHWAB_CLIENT_ID")
+        if not client_id:
+            st.sidebar.error("❌ SCHWAB_CLIENT_ID not found")
+            return
+        redirect_uri = "https://options-scalping-app-ydqxfd2qjfueqznzvxq9ts.streamlit.app/callback"
+        
+        auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?response_type=code&client_id={client_id}&scope=trading%20market_data%20account_read&redirect_uri={redirect_uri}&state=options_scalper"
+        
+        st.sidebar.markdown(f"[🌐 **Open Schwab Auth**]({auth_url})")
+        
+        auth_url_input = st.sidebar.text_input(
+            "Paste redirect URL:",
+            placeholder="https://...",
+            help="Paste the URL after authorization"
+        )
+        
+        if auth_url_input:
+            if st.sidebar.button("🔐 Authenticate"):
+                success = self.process_oauth_callback(auth_url_input)
+                if success:
+                    st.sidebar.success("✅ Authentication successful!")
+                else:
+                    st.sidebar.error("❌ Authentication failed!")
+    
+    def process_oauth_callback(self, redirect_url):
+        """
+        Process OAuth callback URL and exchange code for token
+        
+        Args:
+            redirect_url (str): The redirect URL from Schwab
+            
+        Returns:
+            bool: True if authentication successful
+        """
+        try:
+            # Extract authorization code from URL
+            if 'code=' not in redirect_url:
+                st.error("❌ No authorization code found in URL")
+                return False
+            
+            # Parse the URL to get the authorization code
+            code_start = redirect_url.find('code=') + 5
+            code_end = redirect_url.find('&', code_start)
+            if code_end == -1:
+                code_end = len(redirect_url)
+            
+            auth_code = redirect_url[code_start:code_end]
+            
+            # Exchange code for token
+            token_data = self.exchange_code_for_token(auth_code)
+            
+            if token_data:
+                # Store token data in trade executor
+                from modules.trade_executor import set_token_data
+                set_token_data(token_data)
+                
+                # Store in session state
+                st.session_state.schwab_authenticated = True
+                st.session_state.token_data = token_data
+                
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            st.error(f"❌ Error processing OAuth callback: {e}")
+            return False
+    
+    def exchange_code_for_token(self, auth_code):
+        """
+        Exchange authorization code for access token
+        
+        Args:
+            auth_code (str): Authorization code from OAuth flow
+            
+        Returns:
+            dict: Token data or None if failed
+        """
+        try:
+            import requests
+            
+            # Schwab OAuth token endpoint
+            token_url = "https://api.schwabapi.com/v1/oauth/token"
+            
+            # Your OAuth credentials
+            client_id = os.getenv("SCHWAB_CLIENT_ID")
+            client_secret = os.getenv("SCHWAB_CLIENT_SECRET")
+            if not client_id or not client_secret:
+                print("❌ Missing OAuth credentials in environment variables")
+                return None
+            redirect_uri = "https://options-scalping-app-ydqxfd2qjfueqznzvxq9ts.streamlit.app/callback"
+            
+            # Token request payload
+            payload = {
+                'grant_type': 'authorization_code',
+                'code': auth_code,
+                'redirect_uri': redirect_uri,
+                'client_id': client_id,
+                'client_secret': client_secret
+            }
+            
+            # Make token request
+            response = requests.post(token_url, data=payload)
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                print("✅ OAuth token exchange successful")
+                return token_data
+            else:
+                print(f"❌ Token exchange failed: {response.status_code}")
+                print(response.text)
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error exchanging code for token: {e}")
+            return None
     
     def show_performance_metrics(self):
         """Show detailed performance metrics"""

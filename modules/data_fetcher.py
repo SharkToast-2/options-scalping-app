@@ -346,23 +346,59 @@ class OptimizedDataFetcher:
     def get_market_status(self) -> Dict:
         """Get current market status"""
         try:
-            # Check if market is open (simplified)
             now = datetime.now()
             
-            # US Market hours: 9:30 AM - 4:00 PM ET (simplified)
+            # Check if it's a weekday (Monday = 0, Sunday = 6)
+            is_weekday = now.weekday() < 5
+            
+            if not is_weekday:
+                # Weekend - market is closed
+                return {
+                    'is_open': False,
+                    'current_time': now,
+                    'market_open': None,
+                    'market_close': None,
+                    'time_to_open': 0,
+                    'time_to_close': 0
+                }
+            
+            # US Market hours: 9:30 AM - 4:00 PM ET
             market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
             market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
             
-            is_open = market_open <= now <= market_close and now.weekday() < 5
+            # Check if market is currently open
+            is_open = market_open <= now <= market_close
             
-            return {
-                'is_open': is_open,
-                'current_time': now,
-                'market_open': market_open,
-                'market_close': market_close,
-                'time_to_open': (market_open - now).total_seconds() if now < market_open else 0,
-                'time_to_close': (market_close - now).total_seconds() if now < market_close else 0
-            }
+            if is_open:
+                # Market is open
+                time_to_close = (market_close - now).total_seconds()
+                return {
+                    'is_open': True,
+                    'current_time': now,
+                    'market_open': market_open,
+                    'market_close': market_close,
+                    'time_to_open': 0,
+                    'time_to_close': time_to_close
+                }
+            else:
+                # Market is closed - calculate time to next open
+                if now < market_open:
+                    # Before market opens today
+                    time_to_open = (market_open - now).total_seconds()
+                else:
+                    # After market closes - next open is tomorrow
+                    tomorrow = now + timedelta(days=1)
+                    next_open = tomorrow.replace(hour=9, minute=30, second=0, microsecond=0)
+                    time_to_open = (next_open - now).total_seconds()
+                
+                return {
+                    'is_open': False,
+                    'current_time': now,
+                    'market_open': market_open,
+                    'market_close': market_close,
+                    'time_to_open': time_to_open,
+                    'time_to_close': 0
+                }
             
         except Exception as e:
             logger.error(f"❌ Error getting market status: {e}")

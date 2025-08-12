@@ -59,8 +59,15 @@ class SchwabAuth:
         Click the link below to open the Schwab authorization page:
         """)
         
-        # Display the authorization URL
-        auth_url = self.config['schwab_auth_url']
+        # Generate authorization URL with your actual client ID
+        client_id = self.config.get('schwab_client_id')
+        if not client_id:
+            st.error("❌ SCHWAB_CLIENT_ID not found in configuration")
+            return
+        redirect_uri = self.config.get('schwab_redirect_uri', 'https://options-scalping-app-ydqxfd2qjfueqznzvxq9ts.streamlit.app/callback')
+        
+        auth_url = f"https://api.schwabapi.com/v1/oauth/authorize?response_type=code&client_id={client_id}&scope=trading%20market_data%20account_read&redirect_uri={redirect_uri}&state=options_scalper"
+        
         st.code(auth_url, language="text")
         
         # Clickable link

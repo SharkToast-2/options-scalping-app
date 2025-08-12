@@ -7,20 +7,20 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv('config/.env')
+load_dotenv('.env')
 
 # Schwab API Configuration
-SCHWAB_CLIENT_ID = os.getenv('SCHWAB_CLIENT_ID', '1wzwOrhivb2PkR1UCAUVTKYqC4MTNYlj')
-SCHWAB_CLIENT_SECRET = os.getenv('SCHWAB_CLIENT_SECRET', '67zvYgAIa8bqWr2v')
-SCHWAB_REDIRECT_URI = os.getenv('SCHWAB_REDIRECT_URI', 'https://developer.schwab.com/oauth2-redirect.html')
+SCHWAB_CLIENT_ID = os.getenv('SCHWAB_CLIENT_ID')
+SCHWAB_CLIENT_SECRET = os.getenv('SCHWAB_CLIENT_SECRET')
+SCHWAB_REDIRECT_URI = os.getenv('SCHWAB_REDIRECT_URI', 'http://localhost:8501/callback')
 
 # Schwab Trading API
-SCHWAB_TRADING_KEY = os.getenv('SCHWAB_TRADING_KEY', '3ZHxbk0X7QYK6s0T8VkKNfSkKI1M8LQu')
-SCHWAB_TRADING_SECRET = os.getenv('SCHWAB_TRADING_SECRET', 'eUDIuuRPUDz524ih')
+SCHWAB_TRADING_KEY = os.getenv('SCHWAB_TRADING_KEY')
+SCHWAB_TRADING_SECRET = os.getenv('SCHWAB_TRADING_SECRET')
 
 # Schwab Market Data API
-SCHWAB_MARKET_DATA_KEY = os.getenv('SCHWAB_MARKET_DATA_KEY', 'ldUA8vYfffffryNx194I5cWeWDSy2Jl1')
-SCHWAB_MARKET_DATA_SECRET = os.getenv('SCHWAB_MARKET_DATA_SECRET', '67zvYgAIa8bqWr2v')
+SCHWAB_MARKET_DATA_KEY = os.getenv('SCHWAB_MARKET_DATA_KEY')
+SCHWAB_MARKET_DATA_SECRET = os.getenv('SCHWAB_MARKET_DATA_SECRET')
 
 # Other API Keys
 POLYGON_API_KEY = os.getenv('POLYGON_API_KEY', '')
