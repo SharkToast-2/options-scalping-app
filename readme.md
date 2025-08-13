@@ -283,4 +283,4 @@ If you discover a security vulnerability, please:
 
 ---
 
-*Built with ❤️ for the trading community*
+*Built with ❤️ for the trading community* 
